@@ -15,8 +15,7 @@ nautilus_extension_LTLIBRARIES=libnautilus-image-converter.la
 libnautilus_image_converter_la_SOURCES =				\
 	image-converter.c						\
 	nautilus-image-converter.c	nautilus-image-converter.h	\
-	nautilus-image-resizer.c	nautilus-image-resizer.h	\
-	nautilus-image-rotator.c	nautilus-image-rotator.h
+	nautilus-image-resizer.c	nautilus-image-resizer.h
 
 libnautilus_image_converter_la_LDFLAGS = -module -avoid-version
 libnautilus_image_converter_la_LIBADD  = $(NAUTILUS_LIBS)

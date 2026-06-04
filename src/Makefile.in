@@ -134,8 +134,7 @@ LTLIBRARIES = $(nautilus_extension_LTLIBRARIES)
 am__DEPENDENCIES_1 =
 libnautilus_image_converter_la_DEPENDENCIES = $(am__DEPENDENCIES_1)
 am_libnautilus_image_converter_la_OBJECTS = image-converter.lo \
-	nautilus-image-converter.lo nautilus-image-resizer.lo \
-	nautilus-image-rotator.lo
+	nautilus-image-converter.lo nautilus-image-resizer.lo
 libnautilus_image_converter_la_OBJECTS =  \
 	$(am_libnautilus_image_converter_la_OBJECTS)
 AM_V_lt = $(am__v_lt_@AM_V@)
@@ -163,8 +162,7 @@ depcomp = $(SHELL) $(top_srcdir)/depcomp
 am__maybe_remake_depfiles = depfiles
 am__depfiles_remade = ./$(DEPDIR)/image-converter.Plo \
 	./$(DEPDIR)/nautilus-image-converter.Plo \
-	./$(DEPDIR)/nautilus-image-resizer.Plo \
-	./$(DEPDIR)/nautilus-image-rotator.Plo
+	./$(DEPDIR)/nautilus-image-resizer.Plo
 am__mv = mv -f
 COMPILE = $(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) \
 	$(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS)
@@ -374,8 +372,7 @@ nautilus_extension_LTLIBRARIES = libnautilus-image-converter.la
 libnautilus_image_converter_la_SOURCES = \
 	image-converter.c						\
 	nautilus-image-converter.c	nautilus-image-converter.h	\
-	nautilus-image-resizer.c	nautilus-image-resizer.h	\
-	nautilus-image-rotator.c	nautilus-image-rotator.h
+	nautilus-image-resizer.c	nautilus-image-resizer.h
 
 libnautilus_image_converter_la_LDFLAGS = -module -avoid-version
 libnautilus_image_converter_la_LIBADD = $(NAUTILUS_LIBS)
@@ -458,7 +455,6 @@ distclean-compile:
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/image-converter.Plo@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/nautilus-image-converter.Plo@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/nautilus-image-resizer.Plo@am__quote@ # am--include-marker
-@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/nautilus-image-rotator.Plo@am__quote@ # am--include-marker
 
 $(am__depfiles_remade):
 	@$(MKDIR_P) $(@D)
@@ -624,7 +620,6 @@ distclean: distclean-am
 	-rm -f ./$(DEPDIR)/image-converter.Plo
 	-rm -f ./$(DEPDIR)/nautilus-image-converter.Plo
 	-rm -f ./$(DEPDIR)/nautilus-image-resizer.Plo
-	-rm -f ./$(DEPDIR)/nautilus-image-rotator.Plo
 	-rm -f Makefile
 distclean-am: clean-am distclean-compile distclean-generic \
 	distclean-tags
@@ -673,7 +668,6 @@ maintainer-clean: maintainer-clean-am
 	-rm -f ./$(DEPDIR)/image-converter.Plo
 	-rm -f ./$(DEPDIR)/nautilus-image-converter.Plo
 	-rm -f ./$(DEPDIR)/nautilus-image-resizer.Plo
-	-rm -f ./$(DEPDIR)/nautilus-image-rotator.Plo
 	-rm -f Makefile
 maintainer-clean-am: distclean-am maintainer-clean-generic
 

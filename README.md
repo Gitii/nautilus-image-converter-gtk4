@@ -6,9 +6,9 @@ This targets Nautilus 46 / `libnautilus-extension-4` and GTK4. The old GTK3 exte
 
 ## Features
 
-- Right-click image resize and rotate actions in Nautilus.
+- Single right-click Transform Images action in Nautilus.
 - GTK4 dialogs compatible with Nautilus 46.
-- Resize, re-encode, or resize plus re-encode in one operation.
+- Resize, rotate, re-encode, or combine them in one operation.
 - JPEG output uses ImageMagick decode/transform followed by mozjpeg `cjpeg` encode.
 - JPEG target-size mode binary-searches quality from one transformed lossless intermediate.
 

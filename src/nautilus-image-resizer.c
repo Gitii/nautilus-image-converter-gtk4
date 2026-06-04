@@ -49,13 +49,14 @@ struct _NautilusImageResizerPrivate
 
 	gchar *size;
 	gchar *filter;
+	gchar *angle;
 	gint jpeg_quality;
 
 	GtkDialog *resize_dialog;
 	GtkWidget *resize_button;
 	GtkCheckButton *operation_resize_radiobutton;
+	GtkCheckButton *operation_rotate_radiobutton;
 	GtkCheckButton *operation_compress_radiobutton;
-	GtkCheckButton *operation_resize_compress_radiobutton;
 	GtkCheckButton *default_size_radiobutton;
 	GtkComboBoxText *size_combobox;
 	GtkCheckButton *custom_pct_radiobutton;
@@ -83,6 +84,10 @@ struct _NautilusImageResizerPrivate
 	GtkCheckButton *encoding_quality_radiobutton;
 	GtkSpinButton *jpeg_quality_spinbutton;
 	GtkCheckButton *encoding_target_radiobutton;
+	GtkCheckButton *default_angle_radiobutton;
+	GtkComboBox *angle_combobox;
+	GtkCheckButton *custom_angle_radiobutton;
+	GtkSpinButton *angle_spinbutton;
 };
 
 #define NAUTILUS_IMAGE_RESIZER_GET_PRIVATE(o) (G_TYPE_INSTANCE_GET_PRIVATE((o), NAUTILUS_TYPE_IMAGE_RESIZER, NautilusImageResizerPrivate))
@@ -109,6 +114,7 @@ nautilus_image_resizer_finalize(GObject *object)
 
 	g_free(priv->suffix);
 	g_free(priv->filter);
+	g_free(priv->angle);
 
 	G_OBJECT_CLASS(nautilus_image_resizer_parent_class)->finalize(object);
 }
@@ -214,25 +220,28 @@ update_apply_button_cb(GtkCheckButton *button, gpointer user_data)
 	NautilusImageResizer *resizer = NAUTILUS_IMAGE_RESIZER(user_data);
 	NautilusImageResizerPrivate *priv = NAUTILUS_IMAGE_RESIZER_GET_PRIVATE(resizer);
 	gboolean resize_selected;
+	gboolean rotate_selected;
 	gboolean compress_selected;
 	gboolean operation_selected;
 	gboolean resampling_selected;
+	gboolean angle_selected;
 	gboolean encoding_selected;
 	gboolean valid;
 
 	operation_selected = gtk_check_button_get_active(priv->operation_resize_radiobutton) ||
-		gtk_check_button_get_active(priv->operation_compress_radiobutton) ||
-		gtk_check_button_get_active(priv->operation_resize_compress_radiobutton);
-	resize_selected = gtk_check_button_get_active(priv->operation_resize_radiobutton) ||
-		gtk_check_button_get_active(priv->operation_resize_compress_radiobutton);
-	compress_selected = gtk_check_button_get_active(priv->operation_compress_radiobutton) ||
-		gtk_check_button_get_active(priv->operation_resize_compress_radiobutton);
+		gtk_check_button_get_active(priv->operation_rotate_radiobutton) ||
+		gtk_check_button_get_active(priv->operation_compress_radiobutton);
+	resize_selected = gtk_check_button_get_active(priv->operation_resize_radiobutton);
+	rotate_selected = gtk_check_button_get_active(priv->operation_rotate_radiobutton);
+	compress_selected = gtk_check_button_get_active(priv->operation_compress_radiobutton);
 	resampling_selected = gtk_check_button_get_active(priv->quality_high_radiobutton) ||
 		gtk_check_button_get_active(priv->quality_balanced_radiobutton) ||
 		gtk_check_button_get_active(priv->quality_soft_radiobutton);
+	angle_selected = gtk_check_button_get_active(priv->default_angle_radiobutton) ||
+		gtk_check_button_get_active(priv->custom_angle_radiobutton);
 	encoding_selected = gtk_check_button_get_active(priv->encoding_quality_radiobutton) ||
 		gtk_check_button_get_active(priv->encoding_target_radiobutton);
-	valid = operation_selected && (!resize_selected || resampling_selected) && (!compress_selected || encoding_selected);
+	valid = operation_selected && (!resize_selected || resampling_selected) && (!rotate_selected || angle_selected) && (!compress_selected || encoding_selected);
 
 	gtk_widget_set_sensitive(GTK_WIDGET(priv->default_size_radiobutton), resize_selected);
 	gtk_widget_set_sensitive(GTK_WIDGET(priv->size_combobox), resize_selected);
@@ -244,6 +253,10 @@ update_apply_button_cb(GtkCheckButton *button, gpointer user_data)
 	gtk_widget_set_sensitive(GTK_WIDGET(priv->quality_high_radiobutton), resize_selected);
 	gtk_widget_set_sensitive(GTK_WIDGET(priv->quality_balanced_radiobutton), resize_selected);
 	gtk_widget_set_sensitive(GTK_WIDGET(priv->quality_soft_radiobutton), resize_selected);
+	gtk_widget_set_sensitive(GTK_WIDGET(priv->default_angle_radiobutton), rotate_selected);
+	gtk_widget_set_sensitive(GTK_WIDGET(priv->angle_combobox), rotate_selected);
+	gtk_widget_set_sensitive(GTK_WIDGET(priv->custom_angle_radiobutton), rotate_selected);
+	gtk_widget_set_sensitive(GTK_WIDGET(priv->angle_spinbutton), rotate_selected);
 	gtk_widget_set_sensitive(GTK_WIDGET(priv->encoding_quality_radiobutton), compress_selected);
 	gtk_widget_set_sensitive(GTK_WIDGET(priv->jpeg_quality_spinbutton), compress_selected);
 	gtk_widget_set_sensitive(GTK_WIDGET(priv->encoding_target_radiobutton), compress_selected && priv->target_size_available);
@@ -284,22 +297,27 @@ create_progress_dialog(NautilusImageResizer *resizer)
 }
 
 static gchar *
-build_resize_args(NautilusImageResizerPrivate *priv)
+build_transform_args(NautilusImageResizerPrivate *priv)
 {
-	gchar *filter;
-	gchar *size;
-	gchar *args;
+	GString *args = g_string_new("");
 
-	if (priv->size == NULL)
-		return g_strdup("");
+	if (priv->size != NULL) {
+		gchar *filter = g_shell_quote(priv->filter == NULL ? "Lanczos" : priv->filter);
+		gchar *size = g_shell_quote(priv->size);
 
-	filter = g_shell_quote(priv->filter == NULL ? "Lanczos" : priv->filter);
-	size = g_shell_quote(priv->size);
-	args = g_strdup_printf(" -filter %s -resize %s", filter, size);
-	g_free(filter);
-	g_free(size);
+		g_string_append_printf(args, " -filter %s -resize %s", filter, size);
+		g_free(filter);
+		g_free(size);
+	}
 
-	return args;
+	if (priv->angle != NULL) {
+		gchar *angle = g_shell_quote(priv->angle);
+
+		g_string_append_printf(args, " -rotate %s -orient TopLeft", angle);
+		g_free(angle);
+	}
+
+	return g_string_free(args, FALSE);
 }
 
 static gchar *
@@ -309,7 +327,7 @@ build_jpeg_command(NautilusImageResizerPrivate *priv, const gchar *filename, con
 	gchar *output = g_shell_quote(new_filename);
 	gchar *magick = g_shell_quote(MAGICK_PATH);
 	gchar *cjpeg = g_shell_quote(CJPEG_PATH);
-	gchar *resize_args = build_resize_args(priv);
+	gchar *transform_args = build_transform_args(priv);
 	gchar *command;
 
 	if (priv->use_target_size) {
@@ -324,17 +342,17 @@ build_jpeg_command(NautilusImageResizerPrivate *priv, const gchar *filename, con
 			"done; "
 			"if [ -n \"$best\" ]; then %s -quality $best -outfile %s $tmp; r=$?; else r=1; fi; "
 			"rm -f $tmp; exit $r",
-			magick, input, resize_args, cjpeg, output, output, priv->target_size_kb * 1024, cjpeg, output);
+			magick, input, transform_args, cjpeg, output, output, priv->target_size_kb * 1024, cjpeg, output);
 	} else {
 		command = g_strdup_printf("%s %s%s ppm:- | %s -quality %d -outfile %s",
-			magick, input, resize_args, cjpeg, priv->jpeg_quality, output);
+			magick, input, transform_args, cjpeg, priv->jpeg_quality, output);
 	}
 
 	g_free(input);
 	g_free(output);
 	g_free(magick);
 	g_free(cjpeg);
-	g_free(resize_args);
+	g_free(transform_args);
 
 	return command;
 }
@@ -345,14 +363,14 @@ build_imagemagick_command(NautilusImageResizerPrivate *priv, const gchar *filena
 	gchar *input = g_shell_quote(filename);
 	gchar *output = g_shell_quote(new_filename);
 	gchar *magick = g_shell_quote(MAGICK_PATH);
-	gchar *resize_args = build_resize_args(priv);
+	gchar *transform_args = build_transform_args(priv);
 	gchar *command;
 
-	command = g_strdup_printf("%s %s%s %s", magick, input, resize_args, output);
+	command = g_strdup_printf("%s %s%s %s", magick, input, transform_args, output);
 	g_free(input);
 	g_free(output);
 	g_free(magick);
-	g_free(resize_args);
+	g_free(transform_args);
 
 	return command;
 }
@@ -510,13 +528,13 @@ nautilus_image_resizer_response_cb(GtkDialog *dialog, gint response_id, gpointer
 
 	if (response_id == GTK_RESPONSE_OK)
 	{
-		gboolean resize_selected = gtk_check_button_get_active(priv->operation_resize_radiobutton) ||
-			gtk_check_button_get_active(priv->operation_resize_compress_radiobutton);
-		gboolean compress_selected = gtk_check_button_get_active(priv->operation_compress_radiobutton) ||
-			gtk_check_button_get_active(priv->operation_resize_compress_radiobutton);
+		gboolean resize_selected = gtk_check_button_get_active(priv->operation_resize_radiobutton);
+		gboolean rotate_selected = gtk_check_button_get_active(priv->operation_rotate_radiobutton);
+		gboolean compress_selected = gtk_check_button_get_active(priv->operation_compress_radiobutton);
 
 		priv->use_target_size = FALSE;
 		priv->jpeg_quality = 90;
+		priv->angle = NULL;
 
 		if (resize_selected) {
 			if (gtk_check_button_get_active(priv->quality_high_radiobutton))
@@ -534,6 +552,29 @@ nautilus_image_resizer_response_cb(GtkDialog *dialog, gint response_id, gpointer
 			else
 			{
 				show_error_dialog(GTK_WINDOW(dialog), _("Please select a resampling filter."));
+				return;
+			}
+		}
+
+		if (rotate_selected) {
+			if (gtk_check_button_get_active(priv->default_angle_radiobutton)) {
+				switch (gtk_combo_box_get_active(priv->angle_combobox)) {
+				case 0:
+					priv->angle = g_strdup("90");
+					break;
+				case 1:
+					priv->angle = g_strdup("-90");
+					break;
+				case 2:
+					priv->angle = g_strdup("180");
+					break;
+				default:
+					g_assert_not_reached();
+				}
+			} else if (gtk_check_button_get_active(priv->custom_angle_radiobutton)) {
+				priv->angle = g_strdup_printf("%d", (int)gtk_spin_button_get_value(priv->angle_spinbutton));
+			} else {
+				show_error_dialog(GTK_WINDOW(dialog), _("Please select a rotation angle."));
 				return;
 			}
 		}
@@ -591,6 +632,7 @@ nautilus_image_resizer_init(NautilusImageResizer *resizer)
 	GtkWidget *section;
 	GtkWidget *label;
 	GtkWidget *row;
+	GtkComboBoxText *angle_combo;
 
 	priv->resize_dialog = GTK_DIALOG(gtk_dialog_new());
 	gtk_window_set_title(GTK_WINDOW(priv->resize_dialog), _("Transform Images"));
@@ -619,15 +661,13 @@ nautilus_image_resizer_init(NautilusImageResizer *resizer)
 	priv->operation_resize_radiobutton = GTK_CHECK_BUTTON(gtk_check_button_new_with_label(_("Resize dimensions")));
 	gtk_check_button_set_active(priv->operation_resize_radiobutton, TRUE);
 	gtk_box_append(GTK_BOX(section), GTK_WIDGET(priv->operation_resize_radiobutton));
-	priv->operation_compress_radiobutton = GTK_CHECK_BUTTON(gtk_check_button_new_with_label(_("Re-encode/compress only")));
-	gtk_check_button_set_group(priv->operation_compress_radiobutton, priv->operation_resize_radiobutton);
+	priv->operation_rotate_radiobutton = GTK_CHECK_BUTTON(gtk_check_button_new_with_label(_("Rotate")));
+	gtk_box_append(GTK_BOX(section), GTK_WIDGET(priv->operation_rotate_radiobutton));
+	priv->operation_compress_radiobutton = GTK_CHECK_BUTTON(gtk_check_button_new_with_label(_("Re-encode/compress")));
 	gtk_box_append(GTK_BOX(section), GTK_WIDGET(priv->operation_compress_radiobutton));
-	priv->operation_resize_compress_radiobutton = GTK_CHECK_BUTTON(gtk_check_button_new_with_label(_("Resize and re-encode")));
-	gtk_check_button_set_group(priv->operation_resize_compress_radiobutton, priv->operation_resize_radiobutton);
-	gtk_box_append(GTK_BOX(section), GTK_WIDGET(priv->operation_resize_compress_radiobutton));
 	g_signal_connect(priv->operation_resize_radiobutton, "toggled", G_CALLBACK(update_apply_button_cb), resizer);
+	g_signal_connect(priv->operation_rotate_radiobutton, "toggled", G_CALLBACK(update_apply_button_cb), resizer);
 	g_signal_connect(priv->operation_compress_radiobutton, "toggled", G_CALLBACK(update_apply_button_cb), resizer);
-	g_signal_connect(priv->operation_resize_compress_radiobutton, "toggled", G_CALLBACK(update_apply_button_cb), resizer);
 
 	label = gtk_label_new(_("Dimensions"));
 	gtk_label_set_xalign(GTK_LABEL(label), 0.0);
@@ -690,6 +730,32 @@ nautilus_image_resizer_init(NautilusImageResizer *resizer)
 	g_signal_connect(priv->quality_balanced_radiobutton, "toggled", G_CALLBACK(update_apply_button_cb), resizer);
 	g_signal_connect(priv->quality_soft_radiobutton, "toggled", G_CALLBACK(update_apply_button_cb), resizer);
 
+	label = gtk_label_new(_("Rotation"));
+	gtk_label_set_xalign(GTK_LABEL(label), 0.0);
+	gtk_widget_add_css_class(label, "heading");
+	gtk_box_append(GTK_BOX(box), label);
+
+	section = gtk_box_new(GTK_ORIENTATION_VERTICAL, 8);
+	gtk_box_append(GTK_BOX(box), section);
+	priv->default_angle_radiobutton = GTK_CHECK_BUTTON(gtk_check_button_new_with_label(_("Select an angle:")));
+	gtk_check_button_set_active(priv->default_angle_radiobutton, TRUE);
+	angle_combo = GTK_COMBO_BOX_TEXT(gtk_combo_box_text_new());
+	gtk_combo_box_text_append_text(angle_combo, _("90 degrees clockwise"));
+	gtk_combo_box_text_append_text(angle_combo, _("90 degrees counter-clockwise"));
+	gtk_combo_box_text_append_text(angle_combo, _("180 degrees"));
+	priv->angle_combobox = GTK_COMBO_BOX(angle_combo);
+	gtk_combo_box_set_active(priv->angle_combobox, 0);
+	row = new_labeled_row(GTK_WIDGET(priv->default_angle_radiobutton), GTK_WIDGET(priv->angle_combobox), NULL);
+	gtk_box_append(GTK_BOX(section), row);
+	priv->custom_angle_radiobutton = GTK_CHECK_BUTTON(gtk_check_button_new_with_label(_("Custom angle:")));
+	gtk_check_button_set_group(priv->custom_angle_radiobutton, priv->default_angle_radiobutton);
+	priv->angle_spinbutton = GTK_SPIN_BUTTON(gtk_spin_button_new_with_range(1, 360, 1));
+	gtk_spin_button_set_value(priv->angle_spinbutton, 90);
+	row = new_labeled_row(GTK_WIDGET(priv->custom_angle_radiobutton), GTK_WIDGET(priv->angle_spinbutton), gtk_label_new(_("degrees clockwise")));
+	gtk_box_append(GTK_BOX(section), row);
+	g_signal_connect(priv->default_angle_radiobutton, "toggled", G_CALLBACK(update_apply_button_cb), resizer);
+	g_signal_connect(priv->custom_angle_radiobutton, "toggled", G_CALLBACK(update_apply_button_cb), resizer);
+
 	label = gtk_label_new(_("Encoding"));
 	gtk_label_set_xalign(GTK_LABEL(label), 0.0);
 	gtk_widget_add_css_class(label, "heading");
@@ -751,7 +817,6 @@ nautilus_image_resizer_init(NautilusImageResizer *resizer)
 
 	gboolean all_are_supported = TRUE;
 	gboolean has_jpeg = FALSE;
-	gboolean has_png = FALSE;
 
 	if (convert_available) /* 'convert' is the minimum requirement now */
 	{
@@ -764,10 +829,6 @@ nautilus_image_resizer_init(NautilusImageResizer *resizer)
 			if (g_strcmp0(mime_type, "image/jpeg") == 0)
 			{
 				has_jpeg = TRUE;
-			}
-			else if (g_strcmp0(mime_type, "image/png") == 0)
-			{
-				has_png = TRUE;
 			}
 			else
 			{
@@ -797,7 +858,7 @@ nautilus_image_resizer_init(NautilusImageResizer *resizer)
 		else
 		{
 			gtk_widget_set_tooltip_text(GTK_WIDGET(priv->encoding_target_radiobutton),
-										_("This option is only available for JPEG or PNG files."));
+									_("Target file size is only available when all selected files are JPEG images."));
 		}
 	}
 	/* 4. If we have JPEGs but no mozjpeg, warn the user */
