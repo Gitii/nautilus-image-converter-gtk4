@@ -9,6 +9,8 @@ This targets Nautilus 46 / `libnautilus-extension-4` and GTK4. The old GTK3 exte
 - Single right-click Transform Images action in Nautilus.
 - GTK4 dialogs compatible with Nautilus 46.
 - Resize, rotate, re-encode, or combine them in one operation.
+- Preview runs the transform into temporary files and shows estimated output sizes.
+- Output sizes include the delta, e.g. `521 KB (-22%)`.
 - JPEG output uses ImageMagick decode/transform followed by mozjpeg `cjpeg` encode.
 - JPEG target-size mode binary-searches quality from one transformed lossless intermediate.
 
