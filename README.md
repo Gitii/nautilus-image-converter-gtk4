@@ -1,107 +1,48 @@
+# Nautilus Image Converter GTK4
 
-# Nautilus-Image-Converter-Legacy
+Hard fork of the legacy Nautilus Image Converter codebase for modern Nautilus/GTK.
 
-An extension for the GNOME Nautilus file manager to quickly resize and rotate images from the right-click context menu.
+This targets Nautilus 46 / `libnautilus-extension-4` and GTK4. The old GTK3 extension path is not supported.
 
-This repository is a fork of the original `nautilus-image-converter` from GNOME, updated with a new feature.
+## Features
 
-## ✨ New Feature: Target File Size
+- Right-click image resize and rotate actions in Nautilus.
+- GTK4 dialogs compatible with Nautilus 46.
+- Resize, re-encode, or resize plus re-encode in one operation.
+- JPEG output uses ImageMagick decode/transform followed by mozjpeg `cjpeg` encode.
+- JPEG target-size mode binary-searches quality from one transformed lossless intermediate.
 
-This fork adds a **"Target file size"** option to the "Resize Images" dialog.
+## Build And Install
 
-This allows you to compress **JPG** and **PNG** images to an approximate target size (e.g., 50 KB), which is perfect for preparing images for web uploads, email, or filling out application forms.
-
-
-
----
-
-## Core Features (from Original Project)
-
-All the original features of the `nautilus-image-converter` are fully intact:
-
-* **Resize by Scale:** Scale images by a percentage (e.g., 50%).
-* **Resize by Custom Size:** Set a specific pixel width and height.
-* **Rotate Images:** Rotate 90°, 180°, or by a custom angle.
-* **In-Place or New File:** Choose to overwrite your original images or create new copies (e.g., `image.resized.jpg`).
-
-  
-<img src="images/SS1.png" width="45%"> <img src="images/SS2.png" width="45%">
-
-
----
-
-## Installation
-
-### 1. Install Dependencies
-
-You will need the build tools, `imagemagick`, and `jpegoptim` (for the new feature).
-
-**On Ubuntu / Pop!_OS / Debian-based systems:**
-```bash
-sudo apt-get update
-sudo apt install libnautilus-extension-dev libgtk-3-dev imagemagick jpegoptim intltool
-```
-
-### 2\. Build and Install
+Host requirements on Ubuntu 24.04-style systems:
 
 ```bash
-# 1. Clone this repository
-git clone https://github.com/Ameen-Sha-Cheerangan/nautilus-image-converter-legacy.git
-
-# 2. Enter the new directory
-cd nautilus-image-converter-legacy
-
-# 3. Run configure
-./configure
-
-# 4. Build
-make
-
-# 5. Install
-sudo make install
+sudo apt install build-essential libnautilus-extension-dev libgtk-4-dev
 ```
 
-### 3\. Restart Nautilus (Important\!)
+Devbox must also be installed. It provides autotools, ImageMagick, and mozjpeg for this project.
 
-You **must** restart Nautilus for the extension to load.
+Build and install:
 
 ```bash
-nautilus -q
+./build-and-install.sh
 ```
-Now you can right-click on any JPG or PNG image (this also works when selecting multiple images at once) to see the new options.
 
-### 4\. Uninstall
+Build without installing:
 
-You **must** navigate to the directory `nautilus-image-converter-legacy`
+```bash
+./build-and-install.sh --build-only
+```
+
+The script uses host `/usr/bin/gcc` and `/usr/bin/pkg-config` for Nautilus/GTK ABI compatibility, while Devbox provides autotools, ImageMagick, and mozjpeg.
+
+## Uninstall
 
 ```bash
 sudo make uninstall
+nautilus -q
 ```
 
-Now you are free to remove the directory.
+## Lineage
 
------
-
-## Original Project
-
-This repository is a fork of the original `nautilus-image-converter`, an open-source utility for GNOME. The new "Target file size" feature was added by [Ameen Sha Cheerangan](https://github.com/Ameen-Sha-Cheerangan).
-
-The base code for this fork was sourced directly from the version (by using `apt source nautilus-image-converter`) provided by the official Ubuntu `apt` repositories (0.3.1~git20110416-2), which served as a stable, legacy foundation.
-
-This original project was created by Jürg Billeter and later maintained as part of the official GNOME project. The legacy source repository for that project is believed to be:
-
-`http://git.gnome.org/browse/nautilus-image-converter/` (which returns 404 by the way)
-
-
-## Issues
-
-If you find any issues or have suggestions, please [open an issue](https://github.com/Ameen-Sha-Cheerangan/nautilus-image-converter-legacy/issues).
-
-If you found this tool helpful, please consider giving it a ⭐ on [GitHub](https://github.com/Ameen-Sha-Cheerangan/nautilus-image-converter-legacy)!
-
----
-
-
-Patches welcomed\!
-
-
+This is a hard fork of `Ameen-Sha-Cheerangan/nautilus-image-converter-legacy`, itself a legacy fork of the original GNOME Nautilus Image Converter.

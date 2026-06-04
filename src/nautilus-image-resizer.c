@@ -33,7 +33,7 @@
 #include <gio/gio.h>
 #include <gtk/gtk.h>
 
-#include <libnautilus-extension/nautilus-file-info.h>
+#include <nautilus-extension.h>
 
 typedef struct _NautilusImageResizerPrivate NautilusImageResizerPrivate;
 
@@ -48,28 +48,41 @@ struct _NautilusImageResizerPrivate
 	gboolean cancelled;
 
 	gchar *size;
+	gchar *filter;
+	gint jpeg_quality;
 
 	GtkDialog *resize_dialog;
-	GtkRadioButton *default_size_radiobutton;
+	GtkWidget *resize_button;
+	GtkCheckButton *operation_resize_radiobutton;
+	GtkCheckButton *operation_compress_radiobutton;
+	GtkCheckButton *operation_resize_compress_radiobutton;
+	GtkCheckButton *default_size_radiobutton;
 	GtkComboBoxText *size_combobox;
-	GtkRadioButton *custom_pct_radiobutton;
+	GtkCheckButton *custom_pct_radiobutton;
 	GtkSpinButton *pct_spinbutton;
-	GtkRadioButton *custom_size_radiobutton;
+	GtkCheckButton *custom_size_radiobutton;
 	GtkSpinButton *width_spinbutton;
 	GtkSpinButton *height_spinbutton;
-	GtkRadioButton *append_radiobutton;
+	GtkCheckButton *append_radiobutton;
 	GtkEntry *name_entry;
-	GtkRadioButton *inplace_radiobutton;
+	GtkCheckButton *inplace_radiobutton;
 
 	GtkWidget *progress_dialog;
 	GtkWidget *progress_bar;
 	GtkWidget *progress_label;
 
-	GtkRadioButton *target_size_radiobutton;
 	GtkSpinButton *target_size_spinbutton;
 	GtkComboBoxText *target_size_unit_combobox;
 	gint target_size_kb;
 	gboolean use_target_size;
+	gboolean target_size_available;
+
+	GtkCheckButton *quality_high_radiobutton;
+	GtkCheckButton *quality_balanced_radiobutton;
+	GtkCheckButton *quality_soft_radiobutton;
+	GtkCheckButton *encoding_quality_radiobutton;
+	GtkSpinButton *jpeg_quality_spinbutton;
+	GtkCheckButton *encoding_target_radiobutton;
 };
 
 #define NAUTILUS_IMAGE_RESIZER_GET_PRIVATE(o) (G_TYPE_INSTANCE_GET_PRIVATE((o), NAUTILUS_TYPE_IMAGE_RESIZER, NautilusImageResizerPrivate))
@@ -95,6 +108,7 @@ nautilus_image_resizer_finalize(GObject *object)
 	NautilusImageResizerPrivate *priv = NAUTILUS_IMAGE_RESIZER_GET_PRIVATE(dialog);
 
 	g_free(priv->suffix);
+	g_free(priv->filter);
 
 	G_OBJECT_CLASS(nautilus_image_resizer_parent_class)->finalize(object);
 }
@@ -166,6 +180,183 @@ nautilus_image_resizer_class_init(NautilusImageResizerClass *klass)
 
 static void run_op(NautilusImageResizer *resizer);
 
+static void
+show_error_dialog(GtkWindow *parent, const char *message)
+{
+	GtkWidget *dialog;
+
+	dialog = gtk_message_dialog_new(parent,
+						GTK_DIALOG_MODAL | GTK_DIALOG_DESTROY_WITH_PARENT,
+						GTK_MESSAGE_ERROR,
+						GTK_BUTTONS_OK,
+						"%s",
+						message);
+	g_signal_connect(dialog, "response", G_CALLBACK(gtk_window_destroy), NULL);
+	gtk_window_present(GTK_WINDOW(dialog));
+}
+
+static GtkWidget *
+new_labeled_row(GtkWidget *label, GtkWidget *control, GtkWidget *suffix)
+{
+	GtkWidget *row = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 6);
+
+	gtk_box_append(GTK_BOX(row), label);
+	gtk_box_append(GTK_BOX(row), control);
+	if (suffix != NULL)
+		gtk_box_append(GTK_BOX(row), suffix);
+
+	return row;
+}
+
+static void
+update_apply_button_cb(GtkCheckButton *button, gpointer user_data)
+{
+	NautilusImageResizer *resizer = NAUTILUS_IMAGE_RESIZER(user_data);
+	NautilusImageResizerPrivate *priv = NAUTILUS_IMAGE_RESIZER_GET_PRIVATE(resizer);
+	gboolean resize_selected;
+	gboolean compress_selected;
+	gboolean operation_selected;
+	gboolean resampling_selected;
+	gboolean encoding_selected;
+	gboolean valid;
+
+	operation_selected = gtk_check_button_get_active(priv->operation_resize_radiobutton) ||
+		gtk_check_button_get_active(priv->operation_compress_radiobutton) ||
+		gtk_check_button_get_active(priv->operation_resize_compress_radiobutton);
+	resize_selected = gtk_check_button_get_active(priv->operation_resize_radiobutton) ||
+		gtk_check_button_get_active(priv->operation_resize_compress_radiobutton);
+	compress_selected = gtk_check_button_get_active(priv->operation_compress_radiobutton) ||
+		gtk_check_button_get_active(priv->operation_resize_compress_radiobutton);
+	resampling_selected = gtk_check_button_get_active(priv->quality_high_radiobutton) ||
+		gtk_check_button_get_active(priv->quality_balanced_radiobutton) ||
+		gtk_check_button_get_active(priv->quality_soft_radiobutton);
+	encoding_selected = gtk_check_button_get_active(priv->encoding_quality_radiobutton) ||
+		gtk_check_button_get_active(priv->encoding_target_radiobutton);
+	valid = operation_selected && (!resize_selected || resampling_selected) && (!compress_selected || encoding_selected);
+
+	gtk_widget_set_sensitive(GTK_WIDGET(priv->default_size_radiobutton), resize_selected);
+	gtk_widget_set_sensitive(GTK_WIDGET(priv->size_combobox), resize_selected);
+	gtk_widget_set_sensitive(GTK_WIDGET(priv->custom_pct_radiobutton), resize_selected);
+	gtk_widget_set_sensitive(GTK_WIDGET(priv->pct_spinbutton), resize_selected);
+	gtk_widget_set_sensitive(GTK_WIDGET(priv->custom_size_radiobutton), resize_selected);
+	gtk_widget_set_sensitive(GTK_WIDGET(priv->width_spinbutton), resize_selected);
+	gtk_widget_set_sensitive(GTK_WIDGET(priv->height_spinbutton), resize_selected);
+	gtk_widget_set_sensitive(GTK_WIDGET(priv->quality_high_radiobutton), resize_selected);
+	gtk_widget_set_sensitive(GTK_WIDGET(priv->quality_balanced_radiobutton), resize_selected);
+	gtk_widget_set_sensitive(GTK_WIDGET(priv->quality_soft_radiobutton), resize_selected);
+	gtk_widget_set_sensitive(GTK_WIDGET(priv->encoding_quality_radiobutton), compress_selected);
+	gtk_widget_set_sensitive(GTK_WIDGET(priv->jpeg_quality_spinbutton), compress_selected);
+	gtk_widget_set_sensitive(GTK_WIDGET(priv->encoding_target_radiobutton), compress_selected && priv->target_size_available);
+	gtk_widget_set_sensitive(GTK_WIDGET(priv->target_size_spinbutton), compress_selected && priv->target_size_available);
+	gtk_widget_set_sensitive(GTK_WIDGET(priv->target_size_unit_combobox), compress_selected && priv->target_size_available);
+	gtk_widget_set_sensitive(priv->resize_button, valid);
+}
+
+static void
+create_progress_dialog(NautilusImageResizer *resizer)
+{
+	NautilusImageResizerPrivate *priv = NAUTILUS_IMAGE_RESIZER_GET_PRIVATE(resizer);
+	GtkWidget *content;
+	GtkWidget *box;
+
+	priv->progress_dialog = gtk_dialog_new();
+	gtk_window_set_title(GTK_WINDOW(priv->progress_dialog), _("Transforming Images"));
+	gtk_window_set_modal(GTK_WINDOW(priv->progress_dialog), TRUE);
+	gtk_window_set_default_size(GTK_WINDOW(priv->progress_dialog), 360, -1);
+
+	content = gtk_dialog_get_content_area(GTK_DIALOG(priv->progress_dialog));
+	box = gtk_box_new(GTK_ORIENTATION_VERTICAL, 12);
+	gtk_widget_set_margin_top(box, 12);
+	gtk_widget_set_margin_bottom(box, 12);
+	gtk_widget_set_margin_start(box, 12);
+	gtk_widget_set_margin_end(box, 12);
+	gtk_box_append(GTK_BOX(content), box);
+
+	priv->progress_label = gtk_label_new(NULL);
+	gtk_label_set_xalign(GTK_LABEL(priv->progress_label), 0.0);
+	gtk_box_append(GTK_BOX(box), priv->progress_label);
+
+	priv->progress_bar = gtk_progress_bar_new();
+	gtk_progress_bar_set_show_text(GTK_PROGRESS_BAR(priv->progress_bar), TRUE);
+	gtk_box_append(GTK_BOX(box), priv->progress_bar);
+
+	gtk_window_present(GTK_WINDOW(priv->progress_dialog));
+}
+
+static gchar *
+build_resize_args(NautilusImageResizerPrivate *priv)
+{
+	gchar *filter;
+	gchar *size;
+	gchar *args;
+
+	if (priv->size == NULL)
+		return g_strdup("");
+
+	filter = g_shell_quote(priv->filter == NULL ? "Lanczos" : priv->filter);
+	size = g_shell_quote(priv->size);
+	args = g_strdup_printf(" -filter %s -resize %s", filter, size);
+	g_free(filter);
+	g_free(size);
+
+	return args;
+}
+
+static gchar *
+build_jpeg_command(NautilusImageResizerPrivate *priv, const gchar *filename, const gchar *new_filename)
+{
+	gchar *input = g_shell_quote(filename);
+	gchar *output = g_shell_quote(new_filename);
+	gchar *magick = g_shell_quote(MAGICK_PATH);
+	gchar *cjpeg = g_shell_quote(CJPEG_PATH);
+	gchar *resize_args = build_resize_args(priv);
+	gchar *command;
+
+	if (priv->use_target_size) {
+		command = g_strdup_printf(
+			"tmp=$(mktemp) && %s %s%s ppm:$tmp && "
+			"lo=1; hi=95; best=; "
+			"while [ $lo -le $hi ]; do "
+			"q=$(((lo + hi) / 2)); "
+			"%s -quality $q -outfile %s $tmp || exit 1; "
+			"s=$(wc -c < %s); "
+			"if [ $s -le %d ]; then best=$q; lo=$((q + 1)); else hi=$((q - 1)); fi; "
+			"done; "
+			"if [ -n \"$best\" ]; then %s -quality $best -outfile %s $tmp; r=$?; else r=1; fi; "
+			"rm -f $tmp; exit $r",
+			magick, input, resize_args, cjpeg, output, output, priv->target_size_kb * 1024, cjpeg, output);
+	} else {
+		command = g_strdup_printf("%s %s%s ppm:- | %s -quality %d -outfile %s",
+			magick, input, resize_args, cjpeg, priv->jpeg_quality, output);
+	}
+
+	g_free(input);
+	g_free(output);
+	g_free(magick);
+	g_free(cjpeg);
+	g_free(resize_args);
+
+	return command;
+}
+
+static gchar *
+build_imagemagick_command(NautilusImageResizerPrivate *priv, const gchar *filename, const gchar *new_filename)
+{
+	gchar *input = g_shell_quote(filename);
+	gchar *output = g_shell_quote(new_filename);
+	gchar *magick = g_shell_quote(MAGICK_PATH);
+	gchar *resize_args = build_resize_args(priv);
+	gchar *command;
+
+	command = g_strdup_printf("%s %s%s %s", magick, input, resize_args, output);
+	g_free(input);
+	g_free(output);
+	g_free(magick);
+	g_free(resize_args);
+
+	return command;
+}
+
 static GFile *
 nautilus_image_resizer_transform_filename(NautilusImageResizer *resizer, GFile *orig_file)
 {
@@ -211,30 +402,13 @@ op_finished(GPid pid, gint status, gpointer data)
 		/* resizing failed */
 		char *name = nautilus_file_info_get_name(file);
 
-		GtkWidget *msg_dialog = gtk_message_dialog_new(GTK_WINDOW(priv->progress_dialog), GTK_DIALOG_DESTROY_WITH_PARENT, GTK_MESSAGE_ERROR, GTK_BUTTONS_NONE, "'%s' cannot be resized. Check whether you have permission to write to this folder.", name);
+		char *message = g_strdup_printf("'%s' cannot be resized. Check whether you have permission to write to this folder.", name);
 		g_free(name);
-
-		gtk_dialog_add_button(GTK_DIALOG(msg_dialog), _("_Skip"), 1);
-		gtk_dialog_add_button(GTK_DIALOG(msg_dialog), GTK_STOCK_CANCEL, GTK_RESPONSE_CANCEL);
-		gtk_dialog_add_button(GTK_DIALOG(msg_dialog), _("_Retry"), 0);
-		gtk_dialog_set_default_response(GTK_DIALOG(msg_dialog), 0);
-
-		int response_id = gtk_dialog_run(GTK_DIALOG(msg_dialog));
-		gtk_widget_destroy(msg_dialog);
-		if (response_id == 0)
-		{
-			retry = TRUE;
-		}
-		else if (response_id == GTK_RESPONSE_CANCEL)
-		{
-			priv->cancelled = TRUE;
-		}
-		else if (response_id == 1)
-		{
-			retry = FALSE;
-		}
+		show_error_dialog(GTK_WINDOW(priv->progress_dialog), message);
+		g_free(message);
+		retry = FALSE;
 	}
-	else if (priv->suffix == NULL && !priv->use_target_size)
+	else if (priv->suffix == NULL)
 	{
 		/* resize image in place */
 		GFile *orig_location = nautilus_file_info_get_location(file);
@@ -259,7 +433,7 @@ op_finished(GPid pid, gint status, gpointer data)
 	else
 	{
 		/* cancel/terminate operation */
-		gtk_widget_destroy(priv->progress_dialog);
+		gtk_window_destroy(GTK_WINDOW(priv->progress_dialog));
 	}
 }
 static void
@@ -278,135 +452,30 @@ run_op(NautilusImageResizer *resizer)
 	g_object_unref(orig_location);
 	g_object_unref(new_location);
 
-	gchar *argv[6]; /* Max 6 args for convert */
+	gchar *argv[4];
 	pid_t pid;
-	gchar *size_arg = NULL;
+	gchar *command = NULL;
 	gboolean spawn_success;
+	gchar *mime_type = nautilus_file_info_get_mime_type(file);
 
-	if (priv->use_target_size)
-	{
-		/* We're using "Target file size". We need to check the file type. */
-		NautilusFileInfo *file_info = NAUTILUS_FILE_INFO(priv->files->data);
-		gchar *mime_type = nautilus_file_info_get_mime_type(file_info);
-		gchar *jpegoptim_path = g_find_program_in_path("jpegoptim");
-		gboolean jpegoptim_available = (jpegoptim_path != NULL);
-		g_free(jpegoptim_path); /* We only need the boolean */
-
-		/* format for convert is "50kb" */
-		size_arg = g_strdup_printf("%dkb", priv->target_size_kb);
-
-		if (g_strcmp0(mime_type, "image/jpeg") == 0 && jpegoptim_available)
-		{
-			/*
-			 * --- USE JPEGOPTIM for JPEGs (if available) ---
-			 */
-
-			/* re-format size_arg for jpegoptim: "--size=50k" */
-			g_free(size_arg);
-			size_arg = g_strdup_printf("--size=%dk", priv->target_size_kb);
-
-			if (priv->suffix == NULL)
-			{
-				/* In place: jpegoptim --size=... "filename" */
-				argv[0] = "/usr/bin/jpegoptim";
-				argv[1] = size_arg;
-				argv[2] = filename;
-				argv[3] = NULL;
-				spawn_success = g_spawn_async(NULL, argv, NULL, G_SPAWN_DO_NOT_REAP_CHILD, NULL, NULL, &pid, NULL);
-			}
-			else
-			{
-				/* Append mode: cp "file" "new_file" && jpegoptim --size=... "new_file" */
-				gchar *filename_escaped = g_shell_quote(filename);
-				gchar *new_filename_escaped = g_shell_quote(new_filename);
-				gchar *command = g_strdup_printf("cp %s %s && /usr/bin/jpegoptim %s %s",
-												 filename_escaped,
-												 new_filename_escaped,
-												 size_arg,
-												 new_filename_escaped);
-				g_free(filename_escaped);
-				g_free(new_filename_escaped);
-
-				argv[0] = "/bin/sh";
-				argv[1] = "-c";
-				argv[2] = command;
-				argv[3] = NULL;
-				spawn_success = g_spawn_async(NULL, argv, NULL, G_SPAWN_DO_NOT_REAP_CHILD, NULL, NULL, &pid, NULL);
-				g_free(command);
-			}
-		}
-		else if (g_strcmp0(mime_type, "image/jpeg") == 0 || g_strcmp0(mime_type, "image/png") == 0)
-		{
-			/*
-			 * --- USE IMAGEMAGICK (convert) for PNGs or for JPEGs if jpegoptim is missing ---
-			 * 'convert' uses "-define [format]:extent=[size]"
-			 */
-			gchar *define_arg = NULL;
-
-			if (g_strcmp0(mime_type, "image/jpeg") == 0)
-			{
-				define_arg = g_strdup_printf("jpeg:extent=%s", size_arg);
-			}
-			else
-			{
-				define_arg = g_strdup_printf("png:extent=%s", size_arg);
-			}
-
-			if (priv->suffix == NULL)
-			{
-				/* In place: convert "file" -define ... "file" */
-				argv[0] = "/usr/bin/convert";
-				argv[1] = filename;
-				argv[2] = "-define";
-				argv[3] = define_arg;
-				argv[4] = filename; /* Output is same as input */
-				argv[5] = NULL;
-				spawn_success = g_spawn_async(NULL, argv, NULL, G_SPAWN_DO_NOT_REAP_CHILD, NULL, NULL, &pid, NULL);
-			}
-			else
-			{
-				/* Append mode: convert "file" -define ... "new_file" */
-				argv[0] = "/usr/bin/convert";
-				argv[1] = filename;
-				argv[2] = "-define";
-				argv[3] = define_arg;
-				argv[4] = new_filename;
-				argv[5] = NULL;
-				spawn_success = g_spawn_async(NULL, argv, NULL, G_SPAWN_DO_NOT_REAP_CHILD, NULL, NULL, &pid, NULL);
-			}
-			g_free(define_arg);
-		}
-		else
-		{
-			/* This shouldn't happen if the init() check works, but as a safeguard: */
-			g_warning("Unsupported file type for target size: %s", mime_type);
-			spawn_success = FALSE;
-		}
-
-		g_free(mime_type);
-	}
+	if (g_strcmp0(mime_type, "image/jpeg") == 0 || g_strcmp0(mime_type, "image/jpg") == 0)
+		command = build_jpeg_command(priv, filename, new_filename);
 	else
-	{
-		/* Original resize code for ImageMagick 'convert' */
-		argv[0] = "/usr/bin/convert";
-		argv[1] = filename;
-		argv[2] = "-resize";
-		argv[3] = priv->size;
-		argv[4] = new_filename;
-		argv[5] = NULL;
+		command = build_imagemagick_command(priv, filename, new_filename);
 
-		spawn_success = g_spawn_async(NULL, argv, NULL, G_SPAWN_DO_NOT_REAP_CHILD, NULL, NULL, &pid, NULL);
-	}
-
-	/* Free the size argument if it was allocated */
-	if (size_arg)
-		g_free(size_arg);
+	argv[0] = "/bin/sh";
+	argv[1] = "-c";
+	argv[2] = command;
+	argv[3] = NULL;
+	spawn_success = g_spawn_async(NULL, argv, NULL, G_SPAWN_DO_NOT_REAP_CHILD, NULL, NULL, &pid, NULL);
+	g_free(mime_type);
 
 	if (!spawn_success)
 	{
 		/* Handle spawn failure */
 		g_free(filename);
 		g_free(new_filename);
+		g_free(command);
 		g_warning("Failed to spawn command");
 		/* FIXME: We should probably call op_finished with an error */
 		return;
@@ -417,16 +486,17 @@ run_op(NautilusImageResizer *resizer)
 
 	g_free(filename);
 	g_free(new_filename);
+	g_free(command);
 
 	char *tmp;
 
 	gtk_progress_bar_set_fraction(GTK_PROGRESS_BAR(priv->progress_bar), (double)(priv->images_resized + 1) / priv->images_total);
-	tmp = g_strdup_printf(_("Resizing image: %d of %d"), priv->images_resized + 1, priv->images_total);
+	tmp = g_strdup_printf(_("Transforming image: %d of %d"), priv->images_resized + 1, priv->images_total);
 	gtk_progress_bar_set_text(GTK_PROGRESS_BAR(priv->progress_bar), tmp);
 	g_free(tmp);
 
 	char *name = nautilus_file_info_get_name(file);
-	tmp = g_strdup_printf(_("<i>Resizing \"%s\"</i>"), name);
+	tmp = g_strdup_printf(_("<i>Transforming \"%s\"</i>"), name);
 	g_free(name);
 	gtk_label_set_markup(GTK_LABEL(priv->progress_label), tmp);
 	g_free(tmp);
@@ -440,93 +510,235 @@ nautilus_image_resizer_response_cb(GtkDialog *dialog, gint response_id, gpointer
 
 	if (response_id == GTK_RESPONSE_OK)
 	{
-		if (gtk_toggle_button_get_active(GTK_TOGGLE_BUTTON(priv->append_radiobutton)))
-		{
-			if (strlen(gtk_entry_get_text(priv->name_entry)) == 0)
+		gboolean resize_selected = gtk_check_button_get_active(priv->operation_resize_radiobutton) ||
+			gtk_check_button_get_active(priv->operation_resize_compress_radiobutton);
+		gboolean compress_selected = gtk_check_button_get_active(priv->operation_compress_radiobutton) ||
+			gtk_check_button_get_active(priv->operation_resize_compress_radiobutton);
+
+		priv->use_target_size = FALSE;
+		priv->jpeg_quality = 90;
+
+		if (resize_selected) {
+			if (gtk_check_button_get_active(priv->quality_high_radiobutton))
 			{
-				GtkWidget *msg_dialog = gtk_message_dialog_new(GTK_WINDOW(dialog), GTK_DIALOG_DESTROY_WITH_PARENT, GTK_MESSAGE_ERROR, GTK_BUTTONS_OK, _("Please enter a valid filename suffix!"));
-				gtk_dialog_run(GTK_DIALOG(msg_dialog));
-				gtk_widget_destroy(msg_dialog);
+				priv->filter = g_strdup("Lanczos");
+			}
+			else if (gtk_check_button_get_active(priv->quality_balanced_radiobutton))
+			{
+				priv->filter = g_strdup("Mitchell");
+			}
+			else if (gtk_check_button_get_active(priv->quality_soft_radiobutton))
+			{
+				priv->filter = g_strdup("Triangle");
+			}
+			else
+			{
+				show_error_dialog(GTK_WINDOW(dialog), _("Please select a resampling filter."));
 				return;
 			}
-			priv->suffix = g_strdup(gtk_entry_get_text(priv->name_entry));
 		}
-		if (gtk_toggle_button_get_active(GTK_TOGGLE_BUTTON(priv->default_size_radiobutton)))
+
+		if (compress_selected) {
+			if (gtk_check_button_get_active(priv->encoding_target_radiobutton)) {
+				gint size_val = (gint)gtk_spin_button_get_value(priv->target_size_spinbutton);
+				gint active_unit = gtk_combo_box_get_active(GTK_COMBO_BOX(priv->target_size_unit_combobox));
+
+				priv->target_size_kb = (active_unit == 1) ? size_val * 1024 : size_val;
+				priv->use_target_size = TRUE;
+			} else {
+				priv->jpeg_quality = (gint)gtk_spin_button_get_value(priv->jpeg_quality_spinbutton);
+			}
+		}
+
+		if (gtk_check_button_get_active(priv->append_radiobutton))
+		{
+			if (strlen(gtk_editable_get_text(GTK_EDITABLE(priv->name_entry))) == 0)
+			{
+				show_error_dialog(GTK_WINDOW(dialog), _("Please enter a valid filename suffix!"));
+				return;
+			}
+			priv->suffix = g_strdup(gtk_editable_get_text(GTK_EDITABLE(priv->name_entry)));
+		}
+		if (!resize_selected)
+		{
+			priv->size = NULL;
+		}
+		else if (gtk_check_button_get_active(priv->default_size_radiobutton))
 		{
 			priv->size = gtk_combo_box_text_get_active_text(GTK_COMBO_BOX_TEXT(priv->size_combobox));
 		}
-		else if (gtk_toggle_button_get_active(GTK_TOGGLE_BUTTON(priv->custom_pct_radiobutton)))
+		else if (gtk_check_button_get_active(priv->custom_pct_radiobutton))
 		{
 			priv->size = g_strdup_printf("%d%%", (int)gtk_spin_button_get_value(priv->pct_spinbutton));
 		}
-		else if (gtk_toggle_button_get_active(GTK_TOGGLE_BUTTON(priv->target_size_radiobutton)))
-		{
-			gint size_val = (gint)gtk_spin_button_get_value(priv->target_size_spinbutton);
-			gint active_unit = gtk_combo_box_get_active(GTK_COMBO_BOX(priv->target_size_unit_combobox));
-
-			priv->target_size_kb = (active_unit == 1) ? size_val * 1024 : size_val;
-			priv->use_target_size = TRUE;
-		}
-
 		else
 		{
 			priv->size = g_strdup_printf("%dx%d", (int)gtk_spin_button_get_value(priv->width_spinbutton), (int)gtk_spin_button_get_value(priv->height_spinbutton));
 		}
 
+		create_progress_dialog(resizer);
 		run_op(resizer);
 	}
 
-	gtk_widget_destroy(GTK_WIDGET(dialog));
+	gtk_window_destroy(GTK_WINDOW(dialog));
 }
 static void
 nautilus_image_resizer_init(NautilusImageResizer *resizer)
 {
 	NautilusImageResizerPrivate *priv = NAUTILUS_IMAGE_RESIZER_GET_PRIVATE(resizer);
+	GtkWidget *content;
+	GtkWidget *box;
+	GtkWidget *section;
+	GtkWidget *label;
+	GtkWidget *row;
 
-	GtkBuilder *ui;
-	gchar *path;
-	guint result;
-	GError *err = NULL;
+	priv->resize_dialog = GTK_DIALOG(gtk_dialog_new());
+	gtk_window_set_title(GTK_WINDOW(priv->resize_dialog), _("Transform Images"));
+	gtk_window_set_modal(GTK_WINDOW(priv->resize_dialog), TRUE);
+	gtk_window_set_default_size(GTK_WINDOW(priv->resize_dialog), 420, -1);
+	gtk_dialog_add_button(priv->resize_dialog, _("_Cancel"), GTK_RESPONSE_CANCEL);
+	priv->resize_button = gtk_dialog_add_button(priv->resize_dialog, _("_Apply"), GTK_RESPONSE_OK);
+	gtk_widget_set_sensitive(priv->resize_button, FALSE);
+	gtk_dialog_set_default_response(priv->resize_dialog, GTK_RESPONSE_OK);
 
-	/* Let's create our gtkbuilder and load the xml file */
-	ui = gtk_builder_new();
-	gtk_builder_set_translation_domain(ui, GETTEXT_PACKAGE);
-	path = g_build_filename(DATADIR, PACKAGE, "nautilus-image-resize.ui", NULL);
-	result = gtk_builder_add_from_file(ui, path, &err);
-	g_free(path);
+	content = gtk_dialog_get_content_area(priv->resize_dialog);
+	box = gtk_box_new(GTK_ORIENTATION_VERTICAL, 16);
+	gtk_widget_set_margin_top(box, 12);
+	gtk_widget_set_margin_bottom(box, 12);
+	gtk_widget_set_margin_start(box, 12);
+	gtk_widget_set_margin_end(box, 12);
+	gtk_box_append(GTK_BOX(content), box);
 
-	/* If we're unable to load the xml file */
-	if (result == 0)
-	{
-		g_warning("%s", err->message);
-		g_error_free(err);
-		return;
-	}
+	label = gtk_label_new(_("Operation"));
+	gtk_label_set_xalign(GTK_LABEL(label), 0.0);
+	gtk_widget_add_css_class(label, "heading");
+	gtk_box_append(GTK_BOX(box), label);
 
-	/* Grab some widgets */
-	priv->resize_dialog = GTK_DIALOG(gtk_builder_get_object(ui, "resize_dialog"));
-	priv->default_size_radiobutton =
-		GTK_RADIO_BUTTON(gtk_builder_get_object(ui, "default_size_radiobutton"));
-	priv->size_combobox = GTK_COMBO_BOX_TEXT(gtk_builder_get_object(ui, "comboboxtext_size"));
-	priv->custom_pct_radiobutton =
-		GTK_RADIO_BUTTON(gtk_builder_get_object(ui, "custom_pct_radiobutton"));
-	priv->pct_spinbutton = GTK_SPIN_BUTTON(gtk_builder_get_object(ui, "pct_spinbutton"));
-	priv->custom_size_radiobutton =
-		GTK_RADIO_BUTTON(gtk_builder_get_object(ui, "custom_size_radiobutton"));
-	priv->width_spinbutton = GTK_SPIN_BUTTON(gtk_builder_get_object(ui, "width_spinbutton"));
-	priv->height_spinbutton = GTK_SPIN_BUTTON(gtk_builder_get_object(ui, "height_spinbutton"));
-	priv->append_radiobutton = GTK_RADIO_BUTTON(gtk_builder_get_object(ui, "append_radiobutton"));
-	priv->name_entry = GTK_ENTRY(gtk_builder_get_object(ui, "name_entry"));
-	priv->inplace_radiobutton = GTK_RADIO_BUTTON(gtk_builder_get_object(ui, "inplace_radiobutton"));
-	priv->target_size_radiobutton =
-		GTK_RADIO_BUTTON(gtk_builder_get_object(ui, "target_size_radiobutton"));
-	priv->target_size_spinbutton =
-		GTK_SPIN_BUTTON(gtk_builder_get_object(ui, "target_size_spinbutton"));
-	priv->target_size_unit_combobox =
-		GTK_COMBO_BOX_TEXT(gtk_builder_get_object(ui, "target_size_unit_combobox"));
+	section = gtk_box_new(GTK_ORIENTATION_VERTICAL, 8);
+	gtk_box_append(GTK_BOX(box), section);
+	priv->operation_resize_radiobutton = GTK_CHECK_BUTTON(gtk_check_button_new_with_label(_("Resize dimensions")));
+	gtk_check_button_set_active(priv->operation_resize_radiobutton, TRUE);
+	gtk_box_append(GTK_BOX(section), GTK_WIDGET(priv->operation_resize_radiobutton));
+	priv->operation_compress_radiobutton = GTK_CHECK_BUTTON(gtk_check_button_new_with_label(_("Re-encode/compress only")));
+	gtk_check_button_set_group(priv->operation_compress_radiobutton, priv->operation_resize_radiobutton);
+	gtk_box_append(GTK_BOX(section), GTK_WIDGET(priv->operation_compress_radiobutton));
+	priv->operation_resize_compress_radiobutton = GTK_CHECK_BUTTON(gtk_check_button_new_with_label(_("Resize and re-encode")));
+	gtk_check_button_set_group(priv->operation_resize_compress_radiobutton, priv->operation_resize_radiobutton);
+	gtk_box_append(GTK_BOX(section), GTK_WIDGET(priv->operation_resize_compress_radiobutton));
+	g_signal_connect(priv->operation_resize_radiobutton, "toggled", G_CALLBACK(update_apply_button_cb), resizer);
+	g_signal_connect(priv->operation_compress_radiobutton, "toggled", G_CALLBACK(update_apply_button_cb), resizer);
+	g_signal_connect(priv->operation_resize_compress_radiobutton, "toggled", G_CALLBACK(update_apply_button_cb), resizer);
+
+	label = gtk_label_new(_("Dimensions"));
+	gtk_label_set_xalign(GTK_LABEL(label), 0.0);
+	gtk_widget_add_css_class(label, "heading");
+	gtk_box_append(GTK_BOX(box), label);
+
+	section = gtk_box_new(GTK_ORIENTATION_VERTICAL, 8);
+	gtk_box_append(GTK_BOX(box), section);
+
+	priv->default_size_radiobutton = GTK_CHECK_BUTTON(gtk_check_button_new_with_label(_("Select a size:")));
+	gtk_check_button_set_active(priv->default_size_radiobutton, TRUE);
+	priv->size_combobox = GTK_COMBO_BOX_TEXT(gtk_combo_box_text_new());
+	gtk_combo_box_text_append_text(priv->size_combobox, "96x96");
+	gtk_combo_box_text_append_text(priv->size_combobox, "128x128");
+	gtk_combo_box_text_append_text(priv->size_combobox, "640x480");
+	gtk_combo_box_text_append_text(priv->size_combobox, "800x600");
+	gtk_combo_box_text_append_text(priv->size_combobox, "1024x768");
+	gtk_combo_box_text_append_text(priv->size_combobox, "1280x960");
+	gtk_combo_box_set_active(GTK_COMBO_BOX(priv->size_combobox), 4);
+	row = new_labeled_row(GTK_WIDGET(priv->default_size_radiobutton), GTK_WIDGET(priv->size_combobox), gtk_label_new(_("pixels")));
+	gtk_box_append(GTK_BOX(section), row);
+
+	priv->custom_pct_radiobutton = GTK_CHECK_BUTTON(gtk_check_button_new_with_label(_("Scale:")));
+	gtk_check_button_set_group(priv->custom_pct_radiobutton, priv->default_size_radiobutton);
+	priv->pct_spinbutton = GTK_SPIN_BUTTON(gtk_spin_button_new_with_range(1, 100, 1));
+	gtk_spin_button_set_value(priv->pct_spinbutton, 50);
+	row = new_labeled_row(GTK_WIDGET(priv->custom_pct_radiobutton), GTK_WIDGET(priv->pct_spinbutton), gtk_label_new("%"));
+	gtk_box_append(GTK_BOX(section), row);
+
+	priv->custom_size_radiobutton = GTK_CHECK_BUTTON(gtk_check_button_new_with_label(_("Custom size:")));
+	gtk_check_button_set_group(priv->custom_size_radiobutton, priv->default_size_radiobutton);
+	priv->width_spinbutton = GTK_SPIN_BUTTON(gtk_spin_button_new_with_range(1, 9999, 1));
+	gtk_spin_button_set_value(priv->width_spinbutton, 1000);
+	priv->height_spinbutton = GTK_SPIN_BUTTON(gtk_spin_button_new_with_range(1, 9999, 1));
+	gtk_spin_button_set_value(priv->height_spinbutton, 1000);
+	row = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 6);
+	gtk_box_append(GTK_BOX(row), GTK_WIDGET(priv->custom_size_radiobutton));
+	gtk_box_append(GTK_BOX(row), GTK_WIDGET(priv->width_spinbutton));
+	gtk_box_append(GTK_BOX(row), gtk_label_new("x"));
+	gtk_box_append(GTK_BOX(row), GTK_WIDGET(priv->height_spinbutton));
+	gtk_box_append(GTK_BOX(row), gtk_label_new(_("pixels")));
+	gtk_box_append(GTK_BOX(section), row);
+
+	label = gtk_label_new(_("Resampling"));
+	gtk_label_set_xalign(GTK_LABEL(label), 0.0);
+	gtk_widget_add_css_class(label, "heading");
+	gtk_box_append(GTK_BOX(box), label);
+
+	section = gtk_box_new(GTK_ORIENTATION_VERTICAL, 8);
+	gtk_box_append(GTK_BOX(box), section);
+	priv->quality_high_radiobutton = GTK_CHECK_BUTTON(gtk_check_button_new_with_label(_("Sharp/detailed: Lanczos")));
+	gtk_box_append(GTK_BOX(section), GTK_WIDGET(priv->quality_high_radiobutton));
+	priv->quality_balanced_radiobutton = GTK_CHECK_BUTTON(gtk_check_button_new_with_label(_("Balanced: Mitchell")));
+	gtk_check_button_set_group(priv->quality_balanced_radiobutton, priv->quality_high_radiobutton);
+	gtk_box_append(GTK_BOX(section), GTK_WIDGET(priv->quality_balanced_radiobutton));
+	priv->quality_soft_radiobutton = GTK_CHECK_BUTTON(gtk_check_button_new_with_label(_("Smooth/small: Triangle")));
+	gtk_check_button_set_group(priv->quality_soft_radiobutton, priv->quality_high_radiobutton);
+	gtk_box_append(GTK_BOX(section), GTK_WIDGET(priv->quality_soft_radiobutton));
+	g_signal_connect(priv->quality_high_radiobutton, "toggled", G_CALLBACK(update_apply_button_cb), resizer);
+	g_signal_connect(priv->quality_balanced_radiobutton, "toggled", G_CALLBACK(update_apply_button_cb), resizer);
+	g_signal_connect(priv->quality_soft_radiobutton, "toggled", G_CALLBACK(update_apply_button_cb), resizer);
+
+	label = gtk_label_new(_("Encoding"));
+	gtk_label_set_xalign(GTK_LABEL(label), 0.0);
+	gtk_widget_add_css_class(label, "heading");
+	gtk_box_append(GTK_BOX(box), label);
+
+	section = gtk_box_new(GTK_ORIENTATION_VERTICAL, 8);
+	gtk_box_append(GTK_BOX(box), section);
+	priv->encoding_quality_radiobutton = GTK_CHECK_BUTTON(gtk_check_button_new_with_label(_("JPEG quality:")));
+	gtk_check_button_set_active(priv->encoding_quality_radiobutton, TRUE);
+	priv->jpeg_quality_spinbutton = GTK_SPIN_BUTTON(gtk_spin_button_new_with_range(1, 100, 1));
+	gtk_spin_button_set_value(priv->jpeg_quality_spinbutton, 85);
+	row = new_labeled_row(GTK_WIDGET(priv->encoding_quality_radiobutton), GTK_WIDGET(priv->jpeg_quality_spinbutton), NULL);
+	gtk_box_append(GTK_BOX(section), row);
+	priv->encoding_target_radiobutton = GTK_CHECK_BUTTON(gtk_check_button_new_with_label(_("Target file size:")));
+	gtk_check_button_set_group(priv->encoding_target_radiobutton, priv->encoding_quality_radiobutton);
+	priv->target_size_spinbutton = GTK_SPIN_BUTTON(gtk_spin_button_new_with_range(1, 10000, 1));
+	gtk_spin_button_set_value(priv->target_size_spinbutton, 50);
+	priv->target_size_unit_combobox = GTK_COMBO_BOX_TEXT(gtk_combo_box_text_new());
+	gtk_combo_box_text_append_text(priv->target_size_unit_combobox, "KB");
+	gtk_combo_box_text_append_text(priv->target_size_unit_combobox, "MB");
+	gtk_combo_box_set_active(GTK_COMBO_BOX(priv->target_size_unit_combobox), 0);
+	row = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 6);
+	gtk_box_append(GTK_BOX(row), GTK_WIDGET(priv->encoding_target_radiobutton));
+	gtk_box_append(GTK_BOX(row), GTK_WIDGET(priv->target_size_spinbutton));
+	gtk_box_append(GTK_BOX(row), GTK_WIDGET(priv->target_size_unit_combobox));
+	gtk_box_append(GTK_BOX(section), row);
+	g_signal_connect(priv->encoding_quality_radiobutton, "toggled", G_CALLBACK(update_apply_button_cb), resizer);
+	g_signal_connect(priv->encoding_target_radiobutton, "toggled", G_CALLBACK(update_apply_button_cb), resizer);
+
+	label = gtk_label_new(_("Output"));
+	gtk_label_set_xalign(GTK_LABEL(label), 0.0);
+	gtk_widget_add_css_class(label, "heading");
+	gtk_box_append(GTK_BOX(box), label);
+
+	section = gtk_box_new(GTK_ORIENTATION_VERTICAL, 8);
+	gtk_box_append(GTK_BOX(box), section);
+	priv->append_radiobutton = GTK_CHECK_BUTTON(gtk_check_button_new_with_label(_("Append")));
+	priv->name_entry = GTK_ENTRY(gtk_entry_new());
+	gtk_editable_set_text(GTK_EDITABLE(priv->name_entry), ".resized");
+	row = new_labeled_row(GTK_WIDGET(priv->append_radiobutton), GTK_WIDGET(priv->name_entry), NULL);
+	gtk_box_append(GTK_BOX(section), row);
+	priv->inplace_radiobutton = GTK_CHECK_BUTTON(gtk_check_button_new_with_label(_("Replace originals")));
+	gtk_check_button_set_group(priv->inplace_radiobutton, priv->append_radiobutton);
+	gtk_check_button_set_active(priv->append_radiobutton, TRUE);
+	gtk_box_append(GTK_BOX(section), GTK_WIDGET(priv->inplace_radiobutton));
 
 	priv->use_target_size = FALSE;
 	priv->target_size_kb = 50;
+	priv->target_size_available = TRUE;
 
 	/*
 	 *
@@ -534,15 +746,8 @@ nautilus_image_resizer_init(NautilusImageResizer *resizer)
 	 *
 	 */
 
-	/* 1. Check if 'jpegoptim' is available (for JPEGs) */
-	gchar *jpegoptim_path = g_find_program_in_path("jpegoptim");
-	gboolean jpegoptim_available = (jpegoptim_path != NULL);
-	g_free(jpegoptim_path);
-
-	/* 2. Check if 'convert' is available (for PNGs). This is already a dependency. */
-	gchar *convert_path = g_find_program_in_path("convert");
-	gboolean convert_available = (convert_path != NULL);
-	g_free(convert_path);
+	gboolean cjpeg_available = g_file_test(CJPEG_PATH, G_FILE_TEST_IS_EXECUTABLE);
+	gboolean convert_available = g_file_test(MAGICK_PATH, G_FILE_TEST_IS_EXECUTABLE);
 
 	gboolean all_are_supported = TRUE;
 	gboolean has_jpeg = FALSE;
@@ -579,34 +784,33 @@ nautilus_image_resizer_init(NautilusImageResizer *resizer)
 		all_are_supported = FALSE; /* Can't do anything without convert */
 	}
 
-	/* 3. If any file is unsupported, disable the option */
+	/* 3. If any file is unsupported, disable the target-size encoder option */
 	if (!all_are_supported || !convert_available)
 	{
-		gtk_widget_set_sensitive(GTK_WIDGET(priv->target_size_radiobutton), FALSE);
-		gtk_widget_set_sensitive(GTK_WIDGET(priv->target_size_spinbutton), FALSE);
-		gtk_widget_set_sensitive(GTK_WIDGET(priv->target_size_unit_combobox), FALSE);
+		priv->target_size_available = FALSE;
 
 		if (!convert_available)
 		{
-			gtk_widget_set_tooltip_text(GTK_WIDGET(priv->target_size_radiobutton),
+			gtk_widget_set_tooltip_text(GTK_WIDGET(priv->encoding_target_radiobutton),
 										_("'convert' (ImageMagick) not found. Please install it to use this feature."));
 		}
 		else
 		{
-			gtk_widget_set_tooltip_text(GTK_WIDGET(priv->target_size_radiobutton),
+			gtk_widget_set_tooltip_text(GTK_WIDGET(priv->encoding_target_radiobutton),
 										_("This option is only available for JPEG or PNG files."));
 		}
 	}
-	/* 4. If we have JPEGs but no jpegoptim, warn the user it might be slow */
-	else if (has_jpeg && !jpegoptim_available)
+	/* 4. If we have JPEGs but no mozjpeg, warn the user */
+	else if (has_jpeg && !cjpeg_available)
 	{
-		gtk_widget_set_tooltip_text(GTK_WIDGET(priv->target_size_radiobutton),
-									_("For JPEGs, 'jpegoptim' is not found. Falling back to 'convert' (slower)."));
+		priv->target_size_available = FALSE;
+		gtk_widget_set_tooltip_text(GTK_WIDGET(priv->encoding_target_radiobutton),
+									_("mozjpeg cjpeg is not available for JPEG target-size encoding."));
 	}
 	else
 	{
 		/* 5. THIS IS THE NEW BLOCK: Set the default tooltip */
-		gtk_widget_set_tooltip_text(GTK_WIDGET(priv->target_size_radiobutton),
+		gtk_widget_set_tooltip_text(GTK_WIDGET(priv->encoding_target_radiobutton),
 									_("Sets an approximate target size. The final size may vary and won't reduce further than the image's maximum compression."));
 	}
 	/* --- END OF UPDATED CODE ---
@@ -618,6 +822,7 @@ nautilus_image_resizer_init(NautilusImageResizer *resizer)
 
 	/* Connect signal */
 	g_signal_connect(G_OBJECT(priv->resize_dialog), "response", (GCallback)nautilus_image_resizer_response_cb, resizer);
+	update_apply_button_cb(NULL, resizer);
 }
 
 NautilusImageResizer *
@@ -630,5 +835,5 @@ void nautilus_image_resizer_show_dialog(NautilusImageResizer *resizer)
 {
 	NautilusImageResizerPrivate *priv = NAUTILUS_IMAGE_RESIZER_GET_PRIVATE(resizer);
 
-	gtk_widget_show(GTK_WIDGET(priv->resize_dialog));
+	gtk_window_present(GTK_WINDOW(priv->resize_dialog));
 }

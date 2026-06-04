@@ -29,7 +29,7 @@
 #include "nautilus-image-resizer.h"
 #include "nautilus-image-rotator.h"
 
-#include <libnautilus-extension/nautilus-menu-provider.h>
+#include <nautilus-extension.h>
 
 #include <glib/gi18n-lib.h>
 #include <gtk/gtk.h>
@@ -39,7 +39,6 @@
 static void nautilus_image_converter_instance_init (NautilusImageConverter      *img);
 static void nautilus_image_converter_class_init    (NautilusImageConverterClass *class);
 GList *     nautilus_image_converter_get_file_items (NautilusMenuProvider *provider,
-						     GtkWidget            *window,
 						     GList                *files);
 
 static GType image_converter_type = 0;
@@ -99,7 +98,6 @@ image_rotate_callback (NautilusMenuItem *item,
 
 static GList *
 nautilus_image_converter_get_background_items (NautilusMenuProvider *provider,
-					     GtkWidget		  *window,
 					     NautilusFileInfo	  *file_info)
 {
 	return NULL;
@@ -107,7 +105,6 @@ nautilus_image_converter_get_background_items (NautilusMenuProvider *provider,
 
 GList *
 nautilus_image_converter_get_file_items (NautilusMenuProvider *provider,
-				       GtkWidget            *window,
 				       GList                *files)
 {
 	NautilusMenuItem *item;
@@ -146,7 +143,7 @@ nautilus_image_converter_get_file_items (NautilusMenuProvider *provider,
 }
 
 static void
-nautilus_image_converter_menu_provider_iface_init (NautilusMenuProviderIface *iface)
+nautilus_image_converter_menu_provider_iface_init (NautilusMenuProviderInterface *iface)
 {
 	iface->get_background_items = nautilus_image_converter_get_background_items;
 	iface->get_file_items = nautilus_image_converter_get_file_items;
