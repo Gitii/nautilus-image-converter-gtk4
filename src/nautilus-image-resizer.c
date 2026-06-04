@@ -222,6 +222,8 @@ nautilus_image_resizer_class_init(NautilusImageResizerClass *klass)
 }
 
 static void run_next_file(NautilusImageResizer *resizer);
+static void populate_file_rows(NautilusImageResizerPrivate *priv);
+static void update_target_size_availability(NautilusImageResizer *resizer);
 
 static void
 show_error_dialog(GtkWindow *parent, const char *message)
@@ -374,6 +376,70 @@ append_file_row(NautilusImageResizerPrivate *priv, NautilusFileInfo *file, gint 
 	g_free(original_size);
 
 	return row;
+}
+
+static void
+populate_file_rows(NautilusImageResizerPrivate *priv)
+{
+	GList *file_list;
+	gint row_index = 1;
+
+	if (priv->file_rows == NULL || priv->file_rows->len > 0)
+		return;
+
+	for (file_list = priv->files; file_list != NULL; file_list = file_list->next) {
+		TransformFileRow *row = append_file_row(priv, NAUTILUS_FILE_INFO(file_list->data), row_index++);
+		g_ptr_array_add(priv->file_rows, row);
+	}
+}
+
+static void
+update_target_size_availability(NautilusImageResizer *resizer)
+{
+	NautilusImageResizerPrivate *priv = NAUTILUS_IMAGE_RESIZER_GET_PRIVATE(resizer);
+	gboolean cjpeg_available = g_file_test(CJPEG_PATH, G_FILE_TEST_IS_EXECUTABLE);
+	gboolean convert_available = g_file_test(MAGICK_PATH, G_FILE_TEST_IS_EXECUTABLE);
+	gboolean all_are_supported = TRUE;
+	gboolean has_jpeg = FALSE;
+	GList *file_list;
+
+	priv->target_size_available = TRUE;
+
+	if (convert_available) {
+		for (file_list = priv->files; file_list != NULL; file_list = file_list->next) {
+			NautilusFileInfo *file = NAUTILUS_FILE_INFO(file_list->data);
+			gchar *mime_type = nautilus_file_info_get_mime_type(file);
+
+			if (g_strcmp0(mime_type, "image/jpeg") == 0) {
+				has_jpeg = TRUE;
+			} else {
+				all_are_supported = FALSE;
+				g_free(mime_type);
+				break;
+			}
+			g_free(mime_type);
+		}
+	} else {
+		all_are_supported = FALSE;
+	}
+
+	if (!all_are_supported || !convert_available) {
+		priv->target_size_available = FALSE;
+		if (!convert_available) {
+			gtk_widget_set_tooltip_text(GTK_WIDGET(priv->encoding_target_radiobutton),
+				_("'convert' (ImageMagick) not found. Please install it to use this feature."));
+		} else {
+			gtk_widget_set_tooltip_text(GTK_WIDGET(priv->encoding_target_radiobutton),
+				_("Target file size is only available when all selected files are JPEG images."));
+		}
+	} else if (has_jpeg && !cjpeg_available) {
+		priv->target_size_available = FALSE;
+		gtk_widget_set_tooltip_text(GTK_WIDGET(priv->encoding_target_radiobutton),
+			_("mozjpeg cjpeg is not available for JPEG target-size encoding."));
+	} else {
+		gtk_widget_set_tooltip_text(GTK_WIDGET(priv->encoding_target_radiobutton),
+			_("Sets an approximate target size. The final size may vary and won't reduce further than the image's maximum compression."));
+	}
 }
 
 static void
@@ -838,8 +904,6 @@ nautilus_image_resizer_init(NautilusImageResizer *resizer)
 	GtkWidget *label;
 	GtkWidget *row;
 	GtkComboBoxText *angle_combo;
-	GList *file_list;
-	gint file_row_index;
 
 	priv->resize_dialog = GTK_DIALOG(gtk_dialog_new());
 	gtk_window_set_title(GTK_WINDOW(priv->resize_dialog), _("Transform Images"));
@@ -890,11 +954,6 @@ nautilus_image_resizer_init(NautilusImageResizer *resizer)
 	gtk_grid_attach(GTK_GRID(priv->files_grid), new_table_label(_("New Size"), TRUE), 2, 0, 1, 1);
 	gtk_grid_attach(GTK_GRID(priv->files_grid), new_table_label(_("Status"), TRUE), 3, 0, 1, 1);
 	priv->file_rows = g_ptr_array_new_with_free_func(transform_file_row_free);
-	file_row_index = 1;
-	for (file_list = priv->files; file_list != NULL; file_list = file_list->next) {
-		TransformFileRow *file_row = append_file_row(priv, NAUTILUS_FILE_INFO(file_list->data), file_row_index++);
-		g_ptr_array_add(priv->file_rows, file_row);
-	}
 
 	priv->summary_label = gtk_label_new(_("Ready"));
 	gtk_label_set_xalign(GTK_LABEL(priv->summary_label), 0.0);
@@ -1069,81 +1128,6 @@ nautilus_image_resizer_init(NautilusImageResizer *resizer)
 	priv->target_size_kb = 50;
 	priv->target_size_available = TRUE;
 
-	/*
-	 *
-	 * --- START OF UPDATED CODE ---
-	 *
-	 */
-
-	gboolean cjpeg_available = g_file_test(CJPEG_PATH, G_FILE_TEST_IS_EXECUTABLE);
-	gboolean convert_available = g_file_test(MAGICK_PATH, G_FILE_TEST_IS_EXECUTABLE);
-
-	gboolean all_are_supported = TRUE;
-	gboolean has_jpeg = FALSE;
-
-	if (convert_available) /* 'convert' is the minimum requirement now */
-	{
-		GList *file_list = priv->files;
-		for (; file_list != NULL; file_list = file_list->next)
-		{
-			NautilusFileInfo *file = NAUTILUS_FILE_INFO(file_list->data);
-			gchar *mime_type = nautilus_file_info_get_mime_type(file);
-
-			if (g_strcmp0(mime_type, "image/jpeg") == 0)
-			{
-				has_jpeg = TRUE;
-			}
-			else
-			{
-				/* Unsupported file type found */
-				all_are_supported = FALSE;
-				g_free(mime_type);
-				break;
-			}
-			g_free(mime_type);
-		}
-	}
-	else
-	{
-		all_are_supported = FALSE; /* Can't do anything without convert */
-	}
-
-	/* 3. If any file is unsupported, disable the target-size encoder option */
-	if (!all_are_supported || !convert_available)
-	{
-		priv->target_size_available = FALSE;
-
-		if (!convert_available)
-		{
-			gtk_widget_set_tooltip_text(GTK_WIDGET(priv->encoding_target_radiobutton),
-										_("'convert' (ImageMagick) not found. Please install it to use this feature."));
-		}
-		else
-		{
-			gtk_widget_set_tooltip_text(GTK_WIDGET(priv->encoding_target_radiobutton),
-									_("Target file size is only available when all selected files are JPEG images."));
-		}
-	}
-	/* 4. If we have JPEGs but no mozjpeg, warn the user */
-	else if (has_jpeg && !cjpeg_available)
-	{
-		priv->target_size_available = FALSE;
-		gtk_widget_set_tooltip_text(GTK_WIDGET(priv->encoding_target_radiobutton),
-									_("mozjpeg cjpeg is not available for JPEG target-size encoding."));
-	}
-	else
-	{
-		/* 5. THIS IS THE NEW BLOCK: Set the default tooltip */
-		gtk_widget_set_tooltip_text(GTK_WIDGET(priv->encoding_target_radiobutton),
-									_("Sets an approximate target size. The final size may vary and won't reduce further than the image's maximum compression."));
-	}
-	/* --- END OF UPDATED CODE ---
-	 *
-	 */
-
-	/* Set default item in combo box */
-	/* gtk_combo_box_set_active (priv->size_combobox, 4); 1024x768 */
-
 	/* Connect signal */
 	g_signal_connect(G_OBJECT(priv->resize_dialog), "response", (GCallback)nautilus_image_resizer_response_cb, resizer);
 	update_apply_button_cb(NULL, resizer);
@@ -1159,5 +1143,8 @@ void nautilus_image_resizer_show_dialog(NautilusImageResizer *resizer)
 {
 	NautilusImageResizerPrivate *priv = NAUTILUS_IMAGE_RESIZER_GET_PRIVATE(resizer);
 
+	populate_file_rows(priv);
+	update_target_size_availability(resizer);
+	update_apply_button_cb(NULL, resizer);
 	gtk_window_present(GTK_WINDOW(priv->resize_dialog));
 }
