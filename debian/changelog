@@ -1,3 +1,15 @@
+nautilus-image-converter (0.3.1) unstable; urgency=medium
+
+  * GTK4 / Nautilus 4 extension API port (libnautilus-extension-4).
+  * Single "Transform Images..." dialog for resize, rotate and re-encode.
+  * Packaging: 3.0 (native), debhelper-compat 13, maintained by Gitii.
+    Drop the 2011 patches (already in the tree, or obsolete against it),
+    the upstream-tarball watch file and README.Debian.
+  * Build against the target release so configure bakes in its own
+    ImageMagick binary: convert (IM6) on 24.04, magick (IM7) on 26.04.
+
+ -- Gitii <Gitii@users.noreply.github.com>  Wed, 23 Sep 2026 16:32:16 +0200
+
 nautilus-image-converter (0.3.1~git20110416-2) unstable; urgency=medium
 
   * QA upload.

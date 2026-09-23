@@ -1,16 +1,27 @@
-Source: svn://svn.gnome.org/svn/nautilus-image-converter/tags/NAUTILUS_IMAGE_CONVERTER_0_3_0/
+Format: https://www.debian.org/doc/packaging-manuals/copyright-format/1.0/
+Upstream-Name: nautilus-image-converter
+Source: https://github.com/Gitii/nautilus-image-converter-gtk4
+
+Files: *
+Copyright: 2004-2008 Jürg Billeter <j@bitron.ch>
+           2026 Gitii
+License: GPL-2+
 
 Files: debian/*
-Copyright: © 2007-2008, David Paleino <d.paleino@gmail.com>
+Copyright: 2007-2008 David Paleino <d.paleino@gmail.com>
+           2026 Gitii
+License: GPL-2+
+
 License: GPL-2+
  This package is free software; you can redistribute it and/or modify
  it under the terms of the GNU General Public License as published by
  the Free Software Foundation; either version 2 of the License, or
  (at your option) any later version.
-
-Files: *
-Copyright: © 2004-2008, Jürg Billeter <j@bitron.ch>
-License: GPL-2+
-
-On Debian systems, the complete text of the GNU General
-Public License can be found in `/usr/share/common-licenses/GPL-2'.
+ .
+ This package is distributed in the hope that it will be useful,
+ but WITHOUT ANY WARRANTY; without even the implied warranty of
+ MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ GNU General Public License for more details.
+ .
+ On Debian systems, the complete text of the GNU General Public License
+ version 2 can be found in "/usr/share/common-licenses/GPL-2".
