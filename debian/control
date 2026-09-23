@@ -1,4 +1,4 @@
-Source: nautilus-image-converter
+Source: nautilus-image-converter-gtk4
 Section: gnome
 Priority: optional
 Maintainer: Gitii <Gitii@users.noreply.github.com>
@@ -18,14 +18,21 @@ Vcs-Git: https://github.com/Gitii/nautilus-image-converter-gtk4.git
 Vcs-Browser: https://github.com/Gitii/nautilus-image-converter-gtk4
 Rules-Requires-Root: no
 
-Package: nautilus-image-converter
+Package: nautilus-image-converter-gtk4
 Architecture: any
-Depends: ${misc:Depends}, ${shlibs:Depends}, imagemagick
-Recommends: nautilus, libjpeg-turbo-progs
-Description: Nautilus extension to resize, rotate and convert images
+Depends: ${misc:Depends}, ${shlibs:Depends}, imagemagick, libjpeg-turbo-progs
+Recommends: nautilus
+Conflicts: nautilus-image-converter
+Replaces: nautilus-image-converter
+Provides: nautilus-image-converter
+Description: Nautilus extension to resize, rotate and re-encode images
  Adds a "Transform Images..." entry to the Nautilus context menu for image
- files. It resizes, rotates or re-encodes each selected image, can preview
- the result before applying it, and can encode JPEGs to a target file size.
+ files. It resizes, rotates or re-encodes each selected image in its
+ existing format, can preview the resulting file sizes before applying,
+ and can encode JPEGs to a target file size.
  .
- Conversion is done by ImageMagick. JPEG target-size encoding uses cjpeg
+ Images are processed with ImageMagick; JPEG output is encoded with cjpeg
  from libjpeg-turbo-progs.
+ .
+ This is a fork of nautilus-image-converter and replaces that package: both
+ install the same Nautilus plugin file.

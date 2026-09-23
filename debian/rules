@@ -1,11 +1,14 @@
 #!/usr/bin/make -f
 
+# Loaded into the Nautilus process, so harden fully (adds -z now).
+export DEB_BUILD_MAINT_OPTIONS = hardening=+all
+
 %:
 	dh $@
 
 # The plugin is loaded by Nautilus with dlopen; libtool archives are useless.
 execute_after_dh_auto_install:
-	find debian/nautilus-image-converter -name '*.la' -delete
+	find debian/nautilus-image-converter-gtk4 -name '*.la' -delete
 
 # A Nautilus plugin, not a shared library: no shlibs file or ldconfig trigger.
 override_dh_makeshlibs:
