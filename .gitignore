@@ -31,3 +31,6 @@ libtool
 
 # quilt state
 .pc/
+
+# Output of packaging/build-debs.sh
+dist/
