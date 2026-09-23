@@ -38,10 +38,23 @@ Build without installing:
 
 The script uses host `/usr/bin/gcc` and `/usr/bin/pkg-config` for Nautilus/GTK ABI compatibility, while Devbox provides autotools, ImageMagick, and mozjpeg.
 
+## Install As A Debian Package
+
+`packaging/build-debs.sh` builds the `nautilus-image-converter-gtk4` package for Ubuntu 24.04 and 26.04 in clean Docker containers, from the committed tree:
+
+```bash
+packaging/build-debs.sh            # both; or: noble | resolute
+sudo apt install ./dist/debs/resolute/nautilus-image-converter-gtk4_*.deb
+nautilus -q
+```
+
+Install the package built for your release. Each build links against that release's Nautilus and uses the system ImageMagick and `cjpeg` (from `libjpeg-turbo-progs`), whereas `build-and-install.sh` compiles in the paths to Devbox's copies. The package replaces Ubuntu's own `nautilus-image-converter`, and installs the same plugin file as `build-and-install.sh`, so use one or the other.
+
 ## Uninstall
 
 ```bash
-sudo make uninstall
+sudo make uninstall                              # after build-and-install.sh
+sudo apt remove nautilus-image-converter-gtk4   # after installing the package
 nautilus -q
 ```
 
